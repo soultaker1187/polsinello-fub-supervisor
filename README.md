@@ -16,9 +16,8 @@ All thresholds, the stages that are watched, and the preview/live switch are on 
 | --- | --- | --- |
 | `FUB_API_KEY` | You | Follow Up Boss → Admin → API |
 | `DASHBOARD_PASSWORD` | You | Password for the dashboard login |
-| `SESSION_SECRET` | Already set | Signs the login cookie |
-| `CRON_SECRET` | Already set | Lets only Vercel's scheduler call the jobs |
-| `BLOB_READ_WRITE_TOKEN` | Already set | Private storage for reports |
+| `CRON_SECRET` | You | Any long random string. Lets only Vercel's scheduler call the jobs, and signs the login cookie |
+| `BLOB_READ_WRITE_TOKEN` | Added by Vercel | Appears when the private Blob store is connected |
 | `FUB_SYSTEM`, `FUB_SYSTEM_KEY` | Optional | Registered-system headers for a higher rate limit |
 
 Redeploy after changing any of these.
