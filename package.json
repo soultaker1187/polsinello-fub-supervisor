@@ -1,0 +1,27 @@
+{
+  "name": "polsinello-fub-supervisor",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "tsx scripts/selftest.ts"
+  },
+  "dependencies": {
+    "@vercel/blob": "2.9.0",
+    "next": "15.5.29",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.7",
+    "@types/react": "19.3.3",
+    "@types/react-dom": "19.3.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
