@@ -38,6 +38,11 @@ async function main() {
   for (const n of r.notes.items) perAgent.set(n.userId, (perAgent.get(n.userId) ?? 0) + 1);
   assert.ok([...perAgent.values()].every((n) => n <= 15));
   assert.equal(mockWrites.length, 0, "preview mode must not write to Follow Up Boss");
+  assert.ok(r.totals.atRisk > 0 && r.atRisk.every((x) => x.days >= 10 && x.days < 14 && x.userId));
+  assert.equal(r.agents.reduce((a, b) => a + b.atRisk, 0), r.totals.atRisk);
+  assert.equal(r.sweeps.mode, "off", "no pond chosen, so sweeps stay off");
+  assert.ok(r.agents.some((a) => a.belowStandard.length), "mock agents are well below standard");
+  assert.deepEqual(r.ponds, [{ id: 9, name: "Team Pond" }]);
   console.log("preview run ok:", steps, "steps |", JSON.stringify(r.totals), "| planned notes", r.notes.planned, "| held", r.notes.heldBackByCaps);
 
   await checkNewLeads();
@@ -57,6 +62,24 @@ async function main() {
   do { s = await tick(60000, { force: steps === 0 }); steps++; } while (!["done", "error"].includes(s.phase) && steps < 20);
   const second = (await getReport())!;
   assert.ok(second.notes.items.every((i) => !firstIds.has(i.personId)), "a lead must not be noted twice inside the repeat window");
+  // sweeps: preview lists but never moves; live moves, capped
+  const puts = () => mockWrites.filter((w) => w.url.includes("/people/")).length;
+  await putJSON("settings.json", { ...DEFAULT_SETTINGS, sweepPondId: 9, sweepMode: "preview", maxSweepsPerRun: 5 });
+  steps = 0;
+  do { s = await tick(60000, { force: steps === 0 }); steps++; } while (!["done", "error"].includes(s.phase) && steps < 20);
+  const sp = (await getReport())!;
+  assert.equal(sp.sweeps.mode, "preview");
+  assert.equal(sp.sweeps.planned, 5);
+  assert.ok(sp.sweeps.items.every((i) => i.days >= 30 && i.status === "planned"));
+  assert.equal(puts(), 0, "sweep preview must not move anyone");
+  await putJSON("settings.json", { ...DEFAULT_SETTINGS, sweepPondId: 9, sweepMode: "live", maxSweepsPerRun: 5 });
+  steps = 0;
+  do { s = await tick(60000, { force: steps === 0 }); steps++; } while (!["done", "error"].includes(s.phase) && steps < 20);
+  const sl = (await getReport())!;
+  assert.equal(sl.sweeps.moved, 5);
+  assert.equal(puts(), 5);
+  assert.deepEqual(mockWrites.find((w) => w.url.includes("/people/"))!.body, { assignedPondId: 9 });
+  console.log("sweeps ok: preview 5 planned, live 5 moved to", sl.sweeps.pondName);
   console.log("live run ok: sample note =", JSON.stringify(mockWrites[0].body));
   rmSync(".data", { recursive: true, force: true });
 }

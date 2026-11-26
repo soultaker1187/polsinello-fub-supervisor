@@ -1,6 +1,6 @@
 import { clampSettings, NOTE_SUBJECT, Settings } from "./config";
 import { deletePrefix, getJSON, putJSON } from "./store";
-import { addCallTask, addNote, fubConfigured, getCalls, getTexts, getUsers, listPage } from "./fub";
+import { addCallTask, addNote, fubConfigured, getCalls, getPonds, getTexts, getUsers, listPage, moveToPond } from "./fub";
 import { buildReport, clockStart, gradeLead, Ledger, NewLead, NoteItem, P, planNotes, pruneLedger, Report, scoreResponses, slim, toMs, torontoDate } from "./audit";
 
 export type ScanState = {
@@ -15,6 +15,7 @@ export type ScanState = {
   lockedUntil: number;
   gradeIdx: number;
   noteIdx: number;
+  sweepIdx?: number;
   fieldsSeen: string[];
   contactFieldsFound: string[];
   error?: string;
@@ -34,6 +35,19 @@ export const getHistory = async (): Promise<HistoryEntry[]> => (await getJSON<Hi
 
 function noteBody(item: NoteItem): string {
   return `${NOTE_SUBJECT}: ${item.reason}. Assigned to ${item.agent}. (Database Supervisor)`;
+}
+
+/**
+ * Optional daily summary to a Google Chat space (set GOOGLE_CHAT_WEBHOOK_URL).
+ * Counts per agent only: no client names leave the dashboard.
+ */
+async function postChatSummary(report: Report): Promise<void> {
+  const url = process.env.GOOGLE_CHAT_WEBHOOK_URL;
+  if (!url || !url.startsWith("https://chat.googleapis.com/")) return;
+  const lines = report.agents.filter((a) => a.neglected || a.atRisk).slice(0, 40)
+    .map((a) => `• ${a.name}: ${a.atRisk} at risk, ${a.neglected} need a call${a.belowStandard.length ? " (below standard)" : ""}`);
+  const text = `*Database Supervisor: daily hot sheet*\n${report.totals.atRisk} leads at risk, ${report.totals.neglected} need a call.\n${lines.join("\n")}`;
+  await fetch(url, { method: "POST", headers: { "Content-Type": "application/json; charset=UTF-8" }, body: JSON.stringify({ text }) });
 }
 
 /** First outgoing call (and, if allowed, first personal outgoing text) for a lead; null when there is none. */
@@ -115,7 +129,8 @@ export async function tick(budgetMs: number, opts: { force?: boolean } = {}): Pr
         for (let i = 0; i < s.parts; i++) people.push(...((await getJSON<P[]>(`${dir}part-${i}.json`)) ?? []));
         const settings = await getSettings();
         const users = await getUsers().catch(() => []);
-        const report = buildReport(people, users, settings, { fieldsSeen: new Set(s.fieldsSeen), contactFieldsFound: new Set(s.contactFieldsFound) }, s.scanId, Date.now());
+        const ponds = (await getPonds().catch(() => [])).map((x) => ({ id: Number(x.id), name: String(x.name ?? `Pond ${x.id}`) }));
+        const report = buildReport(people, users, ponds, settings, { fieldsSeen: new Set(s.fieldsSeen), contactFieldsFound: new Set(s.contactFieldsFound) }, s.scanId, Date.now());
         await putJSON(`${dir}draft.json`, report);
         s.phase = "grading";
       }
@@ -161,7 +176,33 @@ export async function tick(budgetMs: number, opts: { force?: boolean } = {}): Pr
         report.notes.mode = "preview";
         s.noteIdx = report.notes.items.length;
       }
+      // Sweeps: only when the sweep switch is live now and was live when the plan was made.
+      const current = await getSettings();
+      const sweepLive = current.sweepMode === "live" && report.sweeps.mode === "live" && current.sweepPondId === report.sweeps.pondId && report.sweeps.pondId !== null;
+      s.sweepIdx = s.sweepIdx ?? 0;
       if (s.noteIdx >= report.notes.items.length) {
+        if (sweepLive) {
+          while (s.sweepIdx < report.sweeps.items.length && left() > 8000) {
+            const item = report.sweeps.items[s.sweepIdx];
+            try {
+              await moveToPond(item.personId, report.sweeps.pondId!);
+              await addNote(item.personId, "Swept to pond", `Moved to ${report.sweeps.pondName} by the Database Supervisor: no contact in ${item.days} days. Was assigned to ${item.fromAgent}.`);
+              item.status = "moved";
+              report.sweeps.moved++;
+            } catch {
+              item.status = "failed";
+              report.sweeps.failed++;
+            }
+            item.at = Date.now();
+            s.sweepIdx++;
+            await sleep(1100);
+          }
+        } else {
+          if (report.sweeps.mode === "live") report.sweeps.mode = "preview";
+          s.sweepIdx = report.sweeps.items.length;
+        }
+      }
+      if (s.noteIdx >= report.notes.items.length && s.sweepIdx >= report.sweeps.items.length) {
         report.generatedAt = Date.now();
         report.diagnostics.seconds = Math.round((Date.now() - s.startedAt) / 1000);
         await putJSON("report/latest.json", report);
@@ -170,6 +211,7 @@ export async function tick(budgetMs: number, opts: { force?: boolean } = {}): Pr
         history.push({ date: today, people: report.totals.people, inScope: report.totals.inScope, neglected: report.totals.neglected, newLeads: graded.length, inTime: graded.filter((l) => l.status === "in_time").length });
         await putJSON("history.json", history.slice(-120));
         await deletePrefix(dir);
+        await postChatSummary(report).catch(() => undefined);
         s.phase = "done";
       } else {
         await putJSON(`${dir}draft.json`, report);

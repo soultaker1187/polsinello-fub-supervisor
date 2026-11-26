@@ -20,18 +20,22 @@ export type P = {
 
 export type Row = { id: number; name: string; agent: string; userId: number | null; stage: string; source: string; created: number; lastContact: number | null; days: number };
 export type NewLead = { id: number; name: string; agent: string; userId: number | null; source: string; created: number; clockStart: number; firstResponse: number | null; minutes: number | null; status: "in_time" | "late" | "none" | "pending" };
-export type AgentRow = { userId: number; name: string; assigned: number; inScope: number; neglected: number; pctNeglected: number; newLeads: number; inTime: number; late: number; none: number; medianMinutes: number | null };
+export type SweepItem = { personId: number; name: string; fromUserId: number; fromAgent: string; days: number; status: "planned" | "moved" | "failed"; at?: number };
+export type AgentRow = { userId: number; name: string; assigned: number; inScope: number; neglected: number; atRisk: number; belowStandard: string[]; pctNeglected: number; newLeads: number; inTime: number; late: number; none: number; medianMinutes: number | null };
 export type NoteItem = { personId: number; name: string; userId: number; agent: string; reason: string; status: "planned" | "written" | "failed"; at?: number };
 
 export type Report = {
   scanId: string;
   generatedAt: number;
   settings: Settings;
-  totals: { people: number; inScope: number; neglected: number; neverContacted: number; inPonds: number; unassigned: number; noContactInfo: number; noPhone: number; noSource: number; noStage: number; duplicateGroups: number };
+  totals: { people: number; inScope: number; atRisk: number; neglected: number; neverContacted: number; inPonds: number; unassigned: number; noContactInfo: number; noPhone: number; noSource: number; noStage: number; duplicateGroups: number };
   stages: { name: string; count: number; inScope: boolean }[];
   agents: AgentRow[];
   neglected: Row[];
   neglectedTruncated: boolean;
+  atRisk: Row[];
+  ponds: { id: number; name: string }[];
+  sweeps: { mode: "off" | "preview" | "live"; pondId: number | null; pondName: string; planned: number; moved: number; failed: number; heldBackByCap: number; items: SweepItem[] };
   newLeads: NewLead[];
   hygiene: { noContactInfo: Row[]; unassigned: Row[]; noSource: Row[]; duplicates: { type: "email" | "phone"; people: { id: number; name: string; agent: string }[] }[] };
   notes: { mode: "preview" | "live"; planned: number; written: number; failed: number; heldBackByCaps: number; items: NoteItem[] };
@@ -122,7 +126,7 @@ const row = (p: P, now: number): Row => ({
   lastContact: p.lastContact, days: Math.floor((now - (p.lastContact ?? p.created)) / DAY),
 });
 
-export function buildReport(people: P[], users: { id: number; name: string }[], settings: Settings, stats: FieldStats, scanId: string, now: number): Report {
+export function buildReport(people: P[], users: { id: number; name: string }[], ponds: { id: number; name: string }[], settings: Settings, stats: FieldStats, scanId: string, now: number): Report {
   const fallback = stats.contactFieldsFound.size === 0;
   if (fallback) for (const p of people) p.lastContact = (p as P & { lastActivity?: number }).lastActivity ?? null;
 
@@ -132,11 +136,13 @@ export function buildReport(people: P[], users: { id: number; name: string }[], 
   const agents = new Map<number, AgentRow>();
   const agent = (id: number, name: string) => {
     let a = agents.get(id);
-    if (!a) agents.set(id, (a = { userId: id, name: userName.get(id) ?? name ?? `User ${id}`, assigned: 0, inScope: 0, neglected: 0, pctNeglected: 0, newLeads: 0, inTime: 0, late: 0, none: 0, medianMinutes: null }));
+    if (!a) agents.set(id, (a = { userId: id, name: userName.get(id) ?? name ?? `User ${id}`, assigned: 0, inScope: 0, neglected: 0, atRisk: 0, belowStandard: [], pctNeglected: 0, newLeads: 0, inTime: 0, late: 0, none: 0, medianMinutes: null }));
     return a;
   };
 
   const cutoff = now - settings.neglectedDays * DAY;
+  const riskCutoff = now - settings.atRiskDays * DAY;
+  const atRisk: Row[] = [];
   const neglected: Row[] = [];
   const noContactInfo: Row[] = [];
   const unassigned: Row[] = [];
@@ -167,6 +173,9 @@ export function buildReport(people: P[], users: { id: number; name: string }[], 
         neglected.push(row(p, now));
         agent(p.userId!, p.agent).neglected++;
         if (!last) neverContacted++;
+      } else if ((last ?? p.created) < riskCutoff) {
+        atRisk.push(row(p, now));
+        agent(p.userId!, p.agent).atRisk++;
       }
     }
     if (p.userId && p.via !== "Import" && p.created > now - NEW_LEAD_LOOKBACK_DAYS * DAY && !excluded.has(p.stage.toLowerCase())) {
@@ -191,15 +200,25 @@ export function buildReport(people: P[], users: { id: number; name: string }[], 
 
   // Freshest slips first: the leads that most recently crossed the line are the most recoverable.
   neglected.sort((a, b) => (b.lastContact ?? b.created) - (a.lastContact ?? a.created));
+  // Closest to the line first: these are the calls that keep a lead from becoming neglected.
+  atRisk.sort((a, b) => (a.lastContact ?? a.created) - (b.lastContact ?? b.created));
+
+  // Sweep plan: leads neglected the longest, capped per run. Nothing moves unless sweeps are live.
+  const pond = ponds.find((x) => x.id === settings.sweepPondId);
+  const sweepable = settings.sweepMode !== "off" && pond ? neglected.filter((r) => r.days >= settings.sweepAfterDays && r.userId).sort((a, b) => b.days - a.days) : [];
+  const sweepItems: SweepItem[] = sweepable.slice(0, settings.maxSweepsPerRun).map((r) => ({ personId: r.id, name: r.name, fromUserId: r.userId!, fromAgent: r.agent, days: r.days, status: "planned" }));
   for (const a of agents.values()) a.pctNeglected = a.inScope ? Math.round((a.neglected / a.inScope) * 100) : 0;
 
   return {
     scanId, generatedAt: now, settings,
-    totals: { people: people.length, inScope, neglected: neglected.length, neverContacted, inPonds, unassigned: unassigned.length, noContactInfo: noContactInfo.length, noPhone, noSource: noSource.length, noStage, duplicateGroups: duplicates.length },
+    totals: { people: people.length, inScope, atRisk: atRisk.length, neglected: neglected.length, neverContacted, inPonds, unassigned: unassigned.length, noContactInfo: noContactInfo.length, noPhone, noSource: noSource.length, noStage, duplicateGroups: duplicates.length },
     stages: [...stageCount.entries()].map(([name, count]) => ({ name, count, inScope: !excluded.has(name.toLowerCase()) })).sort((a, b) => b.count - a.count),
     agents: [...agents.values()].sort((a, b) => b.neglected - a.neglected),
     neglected: neglected.slice(0, LIST_CAP),
     neglectedTruncated: neglected.length > LIST_CAP,
+    atRisk: atRisk.slice(0, 5000),
+    ponds,
+    sweeps: { mode: pond ? settings.sweepMode : "off", pondId: pond?.id ?? null, pondName: pond?.name ?? "", planned: sweepItems.length, moved: 0, failed: 0, heldBackByCap: Math.max(0, sweepable.length - sweepItems.length), items: sweepItems },
     newLeads: newLeads.sort((a, b) => b.created - a.created),
     hygiene: { noContactInfo: noContactInfo.slice(0, 2000), unassigned: unassigned.slice(0, 2000), noSource: noSource.slice(0, 2000), duplicates: duplicates.slice(0, 2000) },
     notes: { mode: settings.mode, planned: 0, written: 0, failed: 0, heldBackByCaps: 0, items: [] },
@@ -237,6 +256,16 @@ export function scoreResponses(report: Report): void {
   for (const [id, arr] of mins) {
     arr.sort((x, y) => x - y);
     byId.get(id)!.medianMinutes = arr.length % 2 ? arr[(arr.length - 1) / 2] : Math.round((arr[arr.length / 2 - 1] + arr[arr.length / 2]) / 2);
+  }
+  // Accountability standard: which agents are below it, and why.
+  const st = report.settings;
+  for (const a of report.agents) {
+    a.belowStandard = [];
+    if (a.inScope >= 5 && a.pctNeglected > st.standardMaxNeglectedPct) a.belowStandard.push(`${a.pctNeglected}% of active leads neglected (limit ${st.standardMaxNeglectedPct}%)`);
+    if (a.newLeads >= st.standardMinNewLeads) {
+      const pct = Math.round((a.inTime / a.newLeads) * 100);
+      if (pct < st.standardMinResponsePct) a.belowStandard.push(`${pct}% of new leads reached in time (minimum ${st.standardMinResponsePct}%)`);
+    }
   }
 }
 

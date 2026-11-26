@@ -59,6 +59,7 @@ export async function mockFetch(url: string, init?: { method?: string; body?: un
     return {};
   }
   if (u.pathname.endsWith("/users")) return { _metadata: { total: AGENTS.length, nextLink: null }, users: AGENTS };
+  if (u.pathname.endsWith("/ponds")) return { _metadata: { nextLink: null }, ponds: [{ id: 9, name: "Team Pond" }] };
   if (u.pathname.endsWith("/people")) {
     const limit = Number(u.searchParams.get("limit") ?? 10);
     const offset = Number(u.searchParams.get("offset") ?? 0);

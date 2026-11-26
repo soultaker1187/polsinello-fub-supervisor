@@ -88,6 +88,13 @@ export const getUsers = () => listAll<FubUser>("users", "/users?limit=100");
 export const getCalls = (personId: number) => listAll<FubCall>("calls", `/calls?personId=${personId}&limit=100`, 2);
 export const getTexts = (personId: number) => listAll<FubText>("textmessages", `/textMessages?personId=${personId}&limit=100`, 2);
 
+export type FubPond = { id: number; name: string };
+export const getPonds = () => listAll<FubPond>("ponds", "/ponds?limit=100");
+
+export async function moveToPond(personId: number, pondId: number): Promise<void> {
+  await fub(`/people/${personId}`, { method: "PUT", body: { assignedPondId: pondId } });
+}
+
 export async function addNote(personId: number, subject: string, body: string): Promise<void> {
   await fub("/notes", { method: "POST", body: { personId, subject, body, isHtml: false } });
 }

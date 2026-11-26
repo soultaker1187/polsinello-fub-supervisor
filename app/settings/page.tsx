@@ -19,6 +19,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <div><label htmlFor="neglectedDays">Neglected after (days)</label><input id="neglectedDays" name="neglectedDays" type="number" min={1} max={365} defaultValue={s.neglectedDays} /></div>
             <div><label htmlFor="responseMinutes">New lead response (minutes)</label><input id="responseMinutes" name="responseMinutes" type="number" min={1} max={1440} defaultValue={s.responseMinutes} /></div>
           </div>
+          <div><label htmlFor="atRiskDays">At risk after (days) <span className="hint">(the early warning before a lead becomes neglected)</span></label><input id="atRiskDays" name="atRiskDays" type="number" min={1} max={364} defaultValue={s.atRiskDays} /></div>
           <div><label htmlFor="responseCounts">What counts as a first response</label>
             <select id="responseCounts" name="responseCounts" defaultValue={s.responseCounts}><option value="call_or_text">A call or a personal text</option><option value="call">A call only</option></select>
             <span className="hint">Automated action-plan texts and emails never count.</span></div>
@@ -41,6 +42,28 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <div><label htmlFor="maxNotesPerRun">Most notes in total, per run</label><input id="maxNotesPerRun" name="maxNotesPerRun" type="number" min={1} max={1000} defaultValue={s.maxNotesPerRun} /></div>
           </div>
           <div><label htmlFor="repeatDays">Flag the same lead again after (days)</label><input id="repeatDays" name="repeatDays" type="number" min={1} max={90} defaultValue={s.repeatDays} /></div>
+        </fieldset>
+        <fieldset>
+          <legend>Sweeps</legend>
+          <div><label htmlFor="sweepMode">Mode</label>
+            <select id="sweepMode" name="sweepMode" defaultValue={s.sweepMode}><option value="off">Off</option><option value="preview">Preview: list the leads that would be swept</option><option value="live">Live: move them to the pond in Follow Up Boss</option></select></div>
+          {s.sweepMode !== "live" && <label style={{ fontWeight: 400 }}><input type="checkbox" name="confirmSweep" value="yes" /> I have reviewed the sweep preview and want leads moved to the pond.</label>}
+          <div className="row2">
+            <div><label htmlFor="sweepAfterDays">Sweep after (days without contact)</label><input id="sweepAfterDays" name="sweepAfterDays" type="number" min={1} max={730} defaultValue={s.sweepAfterDays} /></div>
+            <div><label htmlFor="maxSweepsPerRun">Most leads swept per run</label><input id="maxSweepsPerRun" name="maxSweepsPerRun" type="number" min={1} max={500} defaultValue={s.maxSweepsPerRun} /></div>
+          </div>
+          <div><label htmlFor="sweepPondId">Pond that receives swept leads</label>
+            <select id="sweepPondId" name="sweepPondId" defaultValue={s.sweepPondId ?? ""}><option value="">None chosen (sweeps stay off)</option>{(report?.ponds ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            {!report?.ponds?.length && <span className="hint">Your ponds appear here after the first audit.</span>}</div>
+        </fieldset>
+        <fieldset>
+          <legend>Accountability standard</legend>
+          <div className="row2">
+            <div><label htmlFor="standardMaxNeglectedPct">Most neglected leads allowed (%)</label><input id="standardMaxNeglectedPct" name="standardMaxNeglectedPct" type="number" min={1} max={100} defaultValue={s.standardMaxNeglectedPct} /></div>
+            <div><label htmlFor="standardMinResponsePct">New leads reached in time, minimum (%)</label><input id="standardMinResponsePct" name="standardMinResponsePct" type="number" min={0} max={100} defaultValue={s.standardMinResponsePct} /></div>
+          </div>
+          <div><label htmlFor="standardMinNewLeads">New leads needed before the response standard applies</label><input id="standardMinNewLeads" name="standardMinNewLeads" type="number" min={1} max={100} defaultValue={s.standardMinNewLeads} />
+            <span className="hint">Agents below the standard are flagged on the scorecard. Nothing is changed in Follow Up Boss: pond access and lead flow stay your call.</span></div>
         </fieldset>
         <div><button className="btn" type="submit">Save settings</button></div>
       </form>

@@ -41,6 +41,7 @@ export default async function Overview() {
         <>
           <div className="tiles">
             <a className="tile hot" href="/needs-a-call"><div className="n">{num(report.totals.neglected)}</div><div className="l">Need a call (no contact in {report.settings.neglectedDays}+ days){prev ? ` · was ${num(prev.neglected)}` : ""}</div></a>
+            <a className="tile hot" href="/hot-sheet"><div className="n">{num(report.totals.atRisk)}</div><div className="l">At risk ({report.settings.atRiskDays}–{report.settings.neglectedDays - 1} days without contact)</div></a>
             <a className="tile hot" href="/new-leads"><div className="n">{graded.length ? Math.round((inTime / graded.length) * 100) : 0}%</div><div className="l">New leads reached within {report.settings.responseMinutes} min ({inTime} of {graded.length}, last 7 days)</div></a>
             <div className="tile"><div className="n">{num(report.totals.inScope)}</div><div className="l">Active leads being watched</div></div>
             <div className="tile"><div className="n">{num(report.totals.neverContacted)}</div><div className="l">Of those, never contacted</div></div>
@@ -53,12 +54,13 @@ export default async function Overview() {
           <h2>Agent scorecard</h2>
           <div className="card">
             <table>
-              <thead><tr><th>Agent</th><th className="r">Active leads</th><th className="r">Need a call</th><th className="r">% neglected</th><th className="r">New leads (7 days)</th><th className="r">Within {report.settings.responseMinutes} min</th><th className="r">Late</th><th className="r">No response</th><th className="r">Typical response</th></tr></thead>
+              <thead><tr><th>Agent</th><th className="r">Active leads</th><th className="r">At risk</th><th className="r">Need a call</th><th className="r">% neglected</th><th className="r">New leads (7 days)</th><th className="r">Within {report.settings.responseMinutes} min</th><th className="r">Late</th><th className="r">No response</th><th className="r">Typical response</th><th>Standard</th></tr></thead>
               <tbody>
                 {report.agents.filter((a) => a.inScope || a.newLeads).map((a) => (
                   <tr key={a.userId}>
-                    <td><a href={`/needs-a-call?agent=${a.userId}`}>{a.name}</a></td>
+                    <td><a href={`/hot-sheet?agent=${a.userId}`}>{a.name}</a></td>
                     <td className="r">{num(a.inScope)}</td>
+                    <td className="r">{num(a.atRisk)}</td>
                     <td className="r">{num(a.neglected)}</td>
                     <td className="r"><span className={`pill ${a.pctNeglected >= 50 ? "bad" : a.pctNeglected <= 15 ? "good" : ""}`}>{a.pctNeglected}%</span></td>
                     <td className="r">{a.newLeads}</td>
@@ -66,11 +68,28 @@ export default async function Overview() {
                     <td className="r">{a.late}</td>
                     <td className="r">{a.none}</td>
                     <td className="r">{a.newLeads ? fmtMinutes(a.medianMinutes) : "—"}</td>
+                    <td>{a.belowStandard.length ? <span className="pill bad" title={a.belowStandard.join("; ")}>Below</span> : <span className="pill good">Meets</span>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {report.agents.some((a) => a.belowStandard.length) && (
+            <>
+              <h2>Below the accountability standard</h2>
+              <div className="card">
+                <table>
+                  <thead><tr><th>Agent</th><th>Why</th><th>Options in Follow Up Boss</th></tr></thead>
+                  <tbody>
+                    {report.agents.filter((a) => a.belowStandard.length).map((a) => (
+                      <tr key={a.userId}><td>{a.name}</td><td>{a.belowStandard.join("; ")}</td><td className="muted">Pause their lead flow, or remove their pond access, until they are back within the standard.</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           <h2>Needs A Call notes, this run</h2>
           <div className="card">

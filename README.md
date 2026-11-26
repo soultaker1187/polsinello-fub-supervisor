@@ -8,6 +8,11 @@ Watches the team's Follow Up Boss database and reports what needs attention.
 - **Every 5 minutes**: checks the newest leads and flags any that have waited past the response standard.
 - **Needs A Call notes**: in live mode, adds a note with the subject "Needs A Call" to each flagged lead (optionally with a Call task for the agent). In preview mode nothing is written to Follow Up Boss; the dashboard shows what would be sent.
 
+- **Hot sheets**: each agent's daily call list: new leads waiting, leads at risk (10 to 13 days without contact) and neglected leads.
+- **Sweeps**: leads neglected for 30 days or more can be moved to a pond you choose. Preview by default; live needs its own confirmation tick.
+- **Accountability standard**: agents over the neglected limit or under the response minimum are flagged on the scorecard. Pond access and lead flow are not changed automatically.
+- **Google Chat summary** (optional): set `GOOGLE_CHAT_WEBHOOK_URL` to post per-agent counts to a space after each audit. No client names are sent.
+
 All thresholds, the stages that are watched, and the preview/live switch are on the Settings page.
 
 ## Environment variables (Vercel → Settings → Environment Variables)
@@ -26,7 +31,7 @@ Redeploy after changing any of these.
 
 - Ships in **preview mode**. Going live needs a confirmation tick on the Settings page.
 - Notes are capped per agent and per run, and the same lead is not flagged again inside the repeat window.
-- The only records it creates in Follow Up Boss are notes and (optionally) Call tasks. It never edits, merges, reassigns or deletes contacts.
+- It writes to Follow Up Boss only in live mode: notes, optional Call tasks, and (if live sweeps are on) moving a lead to the chosen pond. It never merges or deletes contacts.
 - Contact names are stored only in a private Vercel Blob store, and every page is behind the login.
 
 ## Local testing

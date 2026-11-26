@@ -20,6 +20,17 @@ export type Settings = {
   repeatDays: number;
   maxNotesPerRun: number;
   maxNotesPerAgent: number;
+  /** Days without contact before a lead is "at risk" (must be below neglectedDays). */
+  atRiskDays: number;
+  /** Sweeps: move long-neglected leads to a pond. preview = list only; live = move them. */
+  sweepMode: "off" | "preview" | "live";
+  sweepAfterDays: number;
+  sweepPondId: number | null;
+  maxSweepsPerRun: number;
+  /** Accountability standard used to flag agents on the scorecard. */
+  standardMaxNeglectedPct: number;
+  standardMinResponsePct: number;
+  standardMinNewLeads: number;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -34,6 +45,14 @@ export const DEFAULT_SETTINGS: Settings = {
   repeatDays: 7,
   maxNotesPerRun: 200,
   maxNotesPerAgent: 15,
+  atRiskDays: 10,
+  sweepMode: "preview",
+  sweepAfterDays: 30,
+  sweepPondId: null,
+  maxSweepsPerRun: 50,
+  standardMaxNeglectedPct: 50,
+  standardMinResponsePct: 50,
+  standardMinNewLeads: 3,
 };
 
 export const NOTE_SUBJECT = "Needs A Call";
@@ -50,8 +69,18 @@ export function clampSettings(input: Partial<Settings>): Settings {
     const n = Math.round(Number(v));
     return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d;
   };
+  const neglectedDays = int(s.neglectedDays, 1, 365, 14);
+  const pond = Math.round(Number(s.sweepPondId));
   return {
-    neglectedDays: int(s.neglectedDays, 1, 365, 14),
+    atRiskDays: Math.min(Math.max(neglectedDays - 1, 1), int(s.atRiskDays, 1, 364, 10)),
+    sweepMode: s.sweepMode === "live" ? "live" : s.sweepMode === "off" ? "off" : "preview",
+    sweepAfterDays: Math.max(neglectedDays, int(s.sweepAfterDays, 1, 730, 30)),
+    sweepPondId: Number.isFinite(pond) && pond > 0 ? pond : null,
+    maxSweepsPerRun: int(s.maxSweepsPerRun, 1, 500, 50),
+    standardMaxNeglectedPct: int(s.standardMaxNeglectedPct, 1, 100, 50),
+    standardMinResponsePct: int(s.standardMinResponsePct, 0, 100, 50),
+    standardMinNewLeads: int(s.standardMinNewLeads, 1, 100, 3),
+    neglectedDays,
     responseMinutes: int(s.responseMinutes, 1, 1440, 5),
     responseCounts: s.responseCounts === "call" ? "call" : "call_or_text",
     clockStartHour: int(s.clockStartHour, 0, 23, 8),
