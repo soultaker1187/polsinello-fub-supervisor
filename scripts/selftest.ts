@@ -43,6 +43,8 @@ async function main() {
   assert.equal(r.sweeps.mode, "off", "no pond chosen, so sweeps stay off");
   assert.ok(r.agents.some((a) => a.belowStandard.length), "mock agents are well below standard");
   assert.deepEqual(r.ponds, [{ id: 9, name: "Team Pond" }]);
+  assert.equal(r.tags.find((t) => t.name === "Past Client")!.count, Math.floor(1234 / 9));
+  assert.equal(r.tagTotals.distinct, 2);
   console.log("preview run ok:", steps, "steps |", JSON.stringify(r.totals), "| planned notes", r.notes.planned, "| held", r.notes.heldBackByCaps);
 
   await checkNewLeads();

@@ -16,6 +16,7 @@ export type P = {
   phones: string[];
   lastContact: number | null;
   via: string;
+  tags?: string[];
 };
 
 export type Row = { id: number; name: string; agent: string; userId: number | null; stage: string; source: string; created: number; lastContact: number | null; days: number };
@@ -30,6 +31,8 @@ export type Report = {
   settings: Settings;
   totals: { people: number; inScope: number; atRisk: number; neglected: number; neverContacted: number; inPonds: number; unassigned: number; noContactInfo: number; noPhone: number; noSource: number; noStage: number; duplicateGroups: number };
   stages: { name: string; count: number; inScope: boolean }[];
+  tags: { name: string; count: number }[];
+  tagTotals: { distinct: number; peopleWithTags: number };
   agents: AgentRow[];
   neglected: Row[];
   neglectedTruncated: boolean;
@@ -92,6 +95,7 @@ export function slim(raw: Record<string, unknown>, stats: FieldStats): P {
     phones: values(raw.phones).map(normPhone).filter((p) => p.length >= 10).slice(0, 4),
     lastContact: last,
     via: String(raw.createdVia ?? ""),
+    tags: values(raw.tags).map((t) => t.trim()).filter(Boolean).slice(0, 40),
     // lastActivity is kept only as a fallback when the account returns no communication dates at all
     ...(toMs(raw.lastActivity) ? { lastActivity: toMs(raw.lastActivity) } : {}),
   } as P;
@@ -133,6 +137,8 @@ export function buildReport(people: P[], users: { id: number; name: string }[], 
   const excluded = new Set(settings.excludedStages.map((s) => s.toLowerCase()));
   const userName = new Map(users.map((u) => [u.id, u.name]));
   const stageCount = new Map<string, number>();
+  const tagCount = new Map<string, number>();
+  let peopleWithTags = 0;
   const agents = new Map<number, AgentRow>();
   const agent = (id: number, name: string) => {
     let a = agents.get(id);
@@ -154,6 +160,10 @@ export function buildReport(people: P[], users: { id: number; name: string }[], 
 
   for (const p of people) {
     stageCount.set(p.stage || "(no stage)", (stageCount.get(p.stage || "(no stage)") ?? 0) + 1);
+    if (p.tags?.length) {
+      peopleWithTags++;
+      for (const t of new Set(p.tags)) tagCount.set(t, (tagCount.get(t) ?? 0) + 1);
+    }
     if (p.userId) agent(p.userId, p.agent).assigned++;
     if (p.pondId) inPonds++;
     if (!p.stage) noStage++;
@@ -213,6 +223,8 @@ export function buildReport(people: P[], users: { id: number; name: string }[], 
     scanId, generatedAt: now, settings,
     totals: { people: people.length, inScope, atRisk: atRisk.length, neglected: neglected.length, neverContacted, inPonds, unassigned: unassigned.length, noContactInfo: noContactInfo.length, noPhone, noSource: noSource.length, noStage, duplicateGroups: duplicates.length },
     stages: [...stageCount.entries()].map(([name, count]) => ({ name, count, inScope: !excluded.has(name.toLowerCase()) })).sort((a, b) => b.count - a.count),
+    tags: [...tagCount.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 1000),
+    tagTotals: { distinct: tagCount.size, peopleWithTags },
     agents: [...agents.values()].sort((a, b) => b.neglected - a.neglected),
     neglected: neglected.slice(0, LIST_CAP),
     neglectedTruncated: neglected.length > LIST_CAP,

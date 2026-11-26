@@ -5,7 +5,7 @@ import { getReport } from "@/lib/scan";
 import type { Row } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
-const TABS = [["duplicates", "Possible duplicates"], ["unassigned", "Not assigned"], ["unreachable", "No phone or email"], ["nosource", "No source"], ["stages", "Stages"]] as const;
+const TABS = [["duplicates", "Possible duplicates"], ["unassigned", "Not assigned"], ["unreachable", "No phone or email"], ["nosource", "No source"], ["stages", "Stages"], ["tags", "Tags"]] as const;
 
 function Rows({ rows }: { rows: Row[] }) {
   return (
@@ -23,8 +23,10 @@ function Rows({ rows }: { rows: Row[] }) {
   );
 }
 
-export default async function Hygiene({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  const tab = (await searchParams).tab ?? "duplicates";
+export default async function Hygiene({ searchParams }: { searchParams: Promise<{ tab?: string; q?: string }> }) {
+  const sp = await searchParams;
+  const tab = sp.tab ?? "duplicates";
+  const q = (sp.q ?? "").trim().toLowerCase();
   const report = await getReport();
   return (
     <Shell>
@@ -55,6 +57,25 @@ export default async function Hygiene({ searchParams }: { searchParams: Promise<
             <tbody>{report.stages.map((s) => <tr key={s.name}><td>{s.name}</td><td className="r">{num(s.count)}</td><td>{s.inScope ? <span className="pill good">Yes</span> : <span className="pill">Left out</span>}</td></tr>)}</tbody>
           </table>
         </div>
+      )}
+      {report && tab === "tags" && (
+        <>
+          <form method="get" action="/hygiene" className="filters">
+            <input type="hidden" name="tab" value="tags" />
+            <input name="q" defaultValue={sp.q ?? ""} placeholder="Search tags, e.g. past client" style={{ padding: "7px 10px", border: "1px solid var(--grey)", borderRadius: 6, minWidth: 260 }} />
+            <button className="btn alt" type="submit">Search</button>
+            <span className="muted">{num(report.tagTotals?.distinct ?? 0)} different tags on {num(report.tagTotals?.peopleWithTags ?? 0)} contacts</span>
+          </form>
+          <div className="card">
+            <table>
+              <thead><tr><th>Tag</th><th className="r">Contacts</th></tr></thead>
+              <tbody>
+                {(report.tags ?? []).filter((t) => !q || t.name.toLowerCase().includes(q)).slice(0, 300).map((t) => <tr key={t.name}><td>{t.name}</td><td className="r">{num(t.count)}</td></tr>)}
+                {!(report.tags ?? []).length && <tr><td colSpan={2} className="muted">Run the audit again to load tags.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </Shell>
   );

@@ -45,7 +45,7 @@ function person(i: number, now: number) {
     lastCall: lastContact && r() < 0.5 ? iso(lastContact) : null,
     emails: hasEmail ? [{ value: `person${base}@example.com` }] : [],
     phones: hasPhone ? [{ value: `905-555-${String(1000 + (base % 9000)).padStart(4, "0")}` }] : [],
-    tags: [],
+    tags: i % 9 === 0 ? ["Past Client", "Newsletter"] : i % 4 === 0 ? ["Newsletter"] : [],
   };
 }
 
