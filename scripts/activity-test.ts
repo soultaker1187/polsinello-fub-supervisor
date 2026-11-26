@@ -17,6 +17,10 @@ async function main() {
   }
   const expected = Math.floor((7 * 86400000) / (9 * 60000)) + 1;
   assert.ok(Math.abs(r.eventsRead - expected) <= 2, `${r.eventsRead} vs ${expected}`);
+  assert.ok(r.regulars.length > 0, "mock has unclaimed regulars");
+  assert.ok(r.regulars.every((x) => x.activeDays >= 3 && x.activeDays <= 7 && (x.heldBy === "Pond: Team Pond" || x.heldBy === "No one")));
+  for (let i = 1; i < r.regulars.length; i++) assert.ok(r.regulars[i - 1].activeDays >= r.regulars[i].activeDays);
+  console.log("unclaimed regulars:", r.regulars.length, "of", r.regularsChecked, "checked; top:", JSON.stringify({ ...r.regulars[0], name: "x" }));
   console.log("activity ok:", steps, "steps,", r.eventsRead, "events,", r.days.map((d) => `${d.date}:${d.activeLeads}`).join(" "));
   rmSync(".data", { recursive: true, force: true });
 }

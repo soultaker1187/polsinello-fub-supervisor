@@ -65,6 +65,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <div><label htmlFor="standardMinNewLeads">New leads needed before the response standard applies</label><input id="standardMinNewLeads" name="standardMinNewLeads" type="number" min={1} max={100} defaultValue={s.standardMinNewLeads} />
             <span className="hint">Agents below the standard are flagged on the scorecard. Nothing is changed in Follow Up Boss: pond access and lead flow stay your call.</span></div>
         </fieldset>
+        <fieldset>
+          <legend>Holding accounts</legend>
+          <div><label htmlFor="holdingAccounts">Accounts that hold leads nobody is working <span className="hint">(one name per line, exactly as shown in Follow Up Boss)</span></label>
+            <textarea id="holdingAccounts" name="holdingAccounts" rows={3} defaultValue={s.holdingAccounts.join("\n")} />
+            <span className="hint">Any user whose name ends with an asterisk is already treated as a holding account. Leads in ponds, or with no agent, always count as unclaimed.</span></div>
+        </fieldset>
         <div><button className="btn" type="submit">Save settings</button></div>
       </form>
     </Shell>

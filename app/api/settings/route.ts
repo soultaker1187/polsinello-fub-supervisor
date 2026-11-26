@@ -34,6 +34,7 @@ export async function POST(req: Request) {
     standardMaxNeglectedPct: Number(f.get("standardMaxNeglectedPct")),
     standardMinResponsePct: Number(f.get("standardMinResponsePct")),
     standardMinNewLeads: Number(f.get("standardMinNewLeads")),
+    holdingAccounts: String(f.get("holdingAccounts") ?? "").split(/\r?\n/),
   });
   await putJSON("settings.json", next);
   const flag = (wantsLive && mode !== "live") || (wantsSweep === "live" && sweepMode !== "live") ? "needconfirm" : "saved";

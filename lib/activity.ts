@@ -1,5 +1,6 @@
 import { getJSON, putJSON } from "./store";
-import { fub, fubConfigured, listPage } from "./fub";
+import { fub, fubConfigured, getPonds, listPage } from "./fub";
+import { clampSettings, isHoldingAccount, Settings } from "./config";
 import { toMs, torontoDate } from "./audit";
 
 const DAY = 86400000;
@@ -22,7 +23,9 @@ export type ActivityState = {
   error?: string;
 };
 export type ActiveLead = { id: number; name: string; agent: string; stage: string; source: string; events: number; types: [string, number][]; lastContact: number | null };
-export type ActivityReport = { generatedAt: number; eventsRead: number; days: { date: string; events: number; activeLeads: number; leads: ActiveLead[] }[] };
+export type Regular = { id: number; name: string; heldBy: string; stage: string; source: string; activeDays: number; events: number; types: [string, number][]; lastActive: string; lastContact: number | null };
+export const REGULAR_MIN_DAYS = 3;
+export type ActivityReport = { generatedAt: number; eventsRead: number; regulars: Regular[]; regularsChecked: number; regularsTruncated: boolean; days: { date: string; events: number; activeLeads: number; leads: ActiveLead[] }[] };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const getActivity = () => getJSON<ActivityReport>("activity.json");
@@ -84,6 +87,22 @@ export async function tickActivity(budgetMs: number, opts: { force?: boolean } =
         top.set(d, ranked);
         for (const [id] of ranked) ids.add(id);
       }
+      // Leads active on several different days: the "regulars".
+      const perLead = new Map<string, { days: number; events: number; last: string; types: Record<string, number> }>();
+      for (const d of days.slice(0, DAYS)) {
+        for (const [id, tally] of Object.entries(s.counts[d])) {
+          const x = perLead.get(id) ?? { days: 0, events: 0, last: d, types: {} };
+          x.days++;
+          x.events += tally.n;
+          if (d > x.last) x.last = d;
+          for (const [t, n] of Object.entries(tally.types)) x.types[t] = (x.types[t] ?? 0) + n;
+          perLead.set(id, x);
+        }
+      }
+      const regularAll = [...perLead.entries()].filter(([, x]) => x.days >= REGULAR_MIN_DAYS).sort((a, b) => b[1].days - a[1].days || b[1].events - a[1].events);
+      const regularIds = regularAll.slice(0, 1500);
+      for (const [id] of regularIds) ids.add(id);
+
       const people = new Map<string, Record<string, unknown>>();
       const all = [...ids];
       for (let i = 0; i < all.length; i += 50) {
@@ -98,9 +117,31 @@ export async function tickActivity(budgetMs: number, opts: { force?: boolean } =
         }
         return best;
       };
+      const settings: Settings = clampSettings((await getJSON<Partial<Settings>>("settings.json")) ?? {});
+      const pondName = new Map((await getPonds().catch(() => [])).map((x) => [Number(x.id), String(x.name ?? `Pond ${x.id}`)]));
+      const regulars: Regular[] = [];
+      for (const [id, x] of regularIds) {
+        const p = people.get(id);
+        if (!p) continue;
+        const agent = String(p.assignedTo ?? "").trim();
+        const pondId = Number(p.assignedPondId) || 0;
+        const heldBy = pondId ? `Pond: ${pondName.get(pondId) ?? pondId}` : !p.assignedUserId && !agent ? "No one" : isHoldingAccount(agent, settings) ? `Holding account: ${agent}` : "";
+        if (!heldBy) continue; // a specific agent has this lead
+        regulars.push({
+          id: Number(id),
+          name: String(p.name ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`).trim() || `Contact ${id}`,
+          heldBy, stage: String(p.stage ?? ""), source: String(p.source ?? ""),
+          activeDays: x.days, events: x.events, lastActive: x.last,
+          types: Object.entries(x.types).sort((a, b) => b[1] - a[1]).slice(0, 4),
+          lastContact: lastContact(p),
+        });
+      }
       const report: ActivityReport = {
         generatedAt: Date.now(),
         eventsRead: s.scanned,
+        regulars: regulars.slice(0, 500),
+        regularsChecked: regularIds.length,
+        regularsTruncated: regularAll.length > regularIds.length,
         days: days.map((d) => ({
           date: d,
           events: Object.values(s!.counts[d]).reduce((a, b) => a + b.n, 0),

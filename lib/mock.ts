@@ -21,7 +21,7 @@ function person(i: number, now: number) {
   const recent = i <= 60; // newest 60 arrived in the last week
   const created = recent ? now - Math.floor(r() * 7 * day) - 20 * 60000 : now - Math.floor((8 + r() * 700) * day);
   const agent = AGENTS[Math.floor(r() * AGENTS.length)];
-  const inPond = r() < 0.06;
+  const inPond = r() < 0.06 || i % 5 === 0;
   const unassigned = !inPond && r() < 0.02;
   const contacted = r() < 0.78;
   const lastContact = contacted ? Math.min(now - 3600000, created + Math.floor(r() * (now - created))) : null;

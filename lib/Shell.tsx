@@ -9,6 +9,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <nav>
             <a href="/">Overview</a>
             <a href="/active">Most active</a>
+            <a href="/unclaimed">Unclaimed &amp; active</a>
             <a href="/hot-sheet">Hot sheets</a>
             <a href="/needs-a-call">Needs A Call</a>
             <a href="/sweeps">Sweeps</a>

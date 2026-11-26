@@ -31,6 +31,8 @@ export type Settings = {
   standardMaxNeglectedPct: number;
   standardMinResponsePct: number;
   standardMinNewLeads: number;
+  /** Accounts that hold leads nobody is working (besides any user whose name ends with an asterisk). */
+  holdingAccounts: string[];
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -53,11 +55,18 @@ export const DEFAULT_SETTINGS: Settings = {
   standardMaxNeglectedPct: 50,
   standardMinResponsePct: 50,
   standardMinNewLeads: 3,
+  holdingAccounts: [],
 };
 
 export const NOTE_SUBJECT = "Needs A Call";
 export const NEW_LEAD_LOOKBACK_DAYS = 7;
 export const LIST_CAP = 20000;
+
+/** True when a lead's "agent" is really a holding account: a name ending in * or one listed in Settings. */
+export function isHoldingAccount(name: string, settings: Pick<Settings, "holdingAccounts">): boolean {
+  const n = name.trim().toLowerCase();
+  return Boolean(n) && (n.endsWith("*") || settings.holdingAccounts.some((h) => h.toLowerCase() === n));
+}
 
 export function fubPersonUrl(id: number): string {
   return `https://app.followupboss.com/2/people/view/${id}`;
@@ -80,6 +89,7 @@ export function clampSettings(input: Partial<Settings>): Settings {
     standardMaxNeglectedPct: int(s.standardMaxNeglectedPct, 1, 100, 50),
     standardMinResponsePct: int(s.standardMinResponsePct, 0, 100, 50),
     standardMinNewLeads: int(s.standardMinNewLeads, 1, 100, 3),
+    holdingAccounts: Array.isArray(s.holdingAccounts) ? s.holdingAccounts.map((x) => String(x).trim()).filter(Boolean).slice(0, 50) : [],
     neglectedDays,
     responseMinutes: int(s.responseMinutes, 1, 1440, 5),
     responseCounts: s.responseCounts === "call" ? "call" : "call_or_text",
