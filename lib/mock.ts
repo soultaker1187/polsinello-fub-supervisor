@@ -59,10 +59,22 @@ export async function mockFetch(url: string, init?: { method?: string; body?: un
     return {};
   }
   if (u.pathname.endsWith("/users")) return { _metadata: { total: AGENTS.length, nextLink: null }, users: AGENTS };
+  if (u.pathname.endsWith("/events")) {
+    const offset = Number(u.searchParams.get("offset") ?? 0);
+    const events = [];
+    for (let i = offset; i < offset + 100; i++) {
+      const r = rng(i + 5);
+      events.push({ id: 900000 - i, created: iso(now - i * 9 * 60000), personId: 100000 + (TOTAL - (1 + Math.floor(r() * r() * 300))), type: ["Viewed Property", "Viewed Property", "Visited Website", "Saved Property", "Property Inquiry", "Unsubscribed"][Math.floor(r() * 6)] });
+    }
+    const next = new URL(url); next.searchParams.set("offset", String(offset + 100));
+    return { _metadata: { nextLink: next.toString() }, events };
+  }
   if (u.pathname.endsWith("/ponds")) return { _metadata: { nextLink: null }, ponds: [{ id: 9, name: "Team Pond" }] };
   if (u.pathname.endsWith("/people")) {
     const limit = Number(u.searchParams.get("limit") ?? 10);
     const offset = Number(u.searchParams.get("offset") ?? 0);
+    const idList = u.searchParams.get("id");
+    if (idList) return { _metadata: { nextLink: null }, people: idList.split(",").map((id) => person(TOTAL - (Number(id) - 100000), now)) };
     const people = [];
     for (let i = offset + 1; i <= Math.min(TOTAL, offset + limit); i++) people.push(person(i, now));
     const nextOffset = offset + limit;

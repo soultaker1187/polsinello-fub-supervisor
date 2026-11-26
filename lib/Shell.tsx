@@ -8,6 +8,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <a className="brand" href="/">polsinello<span>.</span> Database Supervisor</a>
           <nav>
             <a href="/">Overview</a>
+            <a href="/active">Most active</a>
             <a href="/hot-sheet">Hot sheets</a>
             <a href="/needs-a-call">Needs A Call</a>
             <a href="/sweeps">Sweeps</a>
